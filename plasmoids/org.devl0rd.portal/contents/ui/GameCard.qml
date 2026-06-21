@@ -11,6 +11,7 @@ import org.kde.plasma.components as PlasmaComponents
 Item {
     id: card
     property var game: ({})
+    property int friendCount: 0          // friends currently playing this game
     property bool hovered: hover.hovered
     property bool showTitle: true        // consistent across all cards (config-driven)
     property bool armed: false           // a click shows the Play button; leaving clears it
@@ -116,6 +117,37 @@ Item {
                 maximumLineCount: 2
                 wrapMode: Text.Wrap
                 font.weight: Font.DemiBold
+            }
+        }
+    }
+
+    // friends-playing badge — green person bust + count, top-right
+    Rectangle {
+        id: friendBadge
+        anchors.top: frame.top; anchors.right: frame.right
+        anchors.margins: Kirigami.Units.smallSpacing
+        visible: card.friendCount > 0
+        z: 20
+        height: Math.round(Kirigami.Units.gridUnit * 1.1)
+        width: badgeRow.implicitWidth + Kirigami.Units.smallSpacing * 1.5
+        radius: height / 2
+        color: "#43a047"
+        border.width: 1
+        border.color: Qt.rgba(0, 0, 0, 0.35)
+        Row {
+            id: badgeRow
+            anchors.centerIn: parent
+            spacing: 1
+            Kirigami.Icon {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(friendBadge.height * 0.7); height: width
+                source: "im-user"; color: "white"
+            }
+            PlasmaComponents.Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: card.friendCount
+                color: "white"; font.weight: Font.Bold
+                font.pixelSize: Math.round(friendBadge.height * 0.6)
             }
         }
     }

@@ -20,6 +20,45 @@ chmod +x "$REPO_DIR/bin/portal-games"
 ln -sf "$REPO_DIR/bin/portal-games" "$BIN_DIR/portal-games"
 echo "Linked portal-games into $BIN_DIR"
 
+# --- 1b. friends-presence backend + config + resident service ---
+chmod +x "$REPO_DIR/bin/portal-friends"
+ln -sf "$REPO_DIR/bin/portal-friends" "$BIN_DIR/portal-friends"
+echo "Linked portal-friends into $BIN_DIR"
+
+CFG_DIR="$HOME/.config/Plasma-App-Portal"
+mkdir -p "$CFG_DIR"
+if [ ! -f "$CFG_DIR/config.json" ]; then
+    cp "$REPO_DIR/config.example.json" "$CFG_DIR/config.json"
+    echo "Created $CFG_DIR/config.json -- paste your free Steam Web API key there"
+    echo "  (get one at https://steamcommunity.com/dev/apikey)"
+fi
+
+mkdir -p "$HOME/.config/systemd/user"
+# pin the resident collector to the E-cores, same as the router/log collectors
+AFFINITY=""
+ECORES=$(python3 -S "$REPO_DIR/bin/portal-ecores" 2>/dev/null)
+[ -n "$ECORES" ] && AFFINITY="CPUAffinity=$ECORES" && echo "Pinning portal-friends to efficiency cores: $ECORES"
+cat > "$HOME/.config/systemd/user/portal-friends.service" <<EOF
+[Unit]
+Description=App Portal friends-presence collector
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $REPO_DIR/bin/portal-friends --serve
+Restart=always
+RestartSec=10
+Nice=19
+$AFFINITY
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now portal-friends.service >/dev/null 2>&1 \
+    && echo "Enabled portal-friends.service (friends badge in the Games view)" \
+    || echo "  (could not enable portal-friends.service -- enable it manually)"
+
 # --- 2. install the plasmoid(s) ---
 echo "Installing widget(s)..."
 for d in "$PLASMOID_SRC"/org.devl0rd.portal*; do
@@ -32,4 +71,5 @@ done
 
 echo ""
 echo "Done! Add it via right-click panel -> Add Widgets -> search \"App Portal\"."
-echo "If it doesn't appear yet, run:  kquitapp6 plasmashell && kstart plasmashell"
+echo "If it doesn't appear yet, run:  systemctl --user restart plasma-plasmashell.service"
+echo "Friends badge: add your Steam Web API key to $HOME/.config/Plasma-App-Portal/config.json"

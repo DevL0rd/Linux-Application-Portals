@@ -59,7 +59,10 @@ Item {
         }
     }
     function reload() { gv.loading = true; gamesSrc.connectSource(gv.portalBin) }
-    onActiveChanged: if (active && games.length === 0 && !loading) reload()
+    onActiveChanged: {
+        if (active && games.length === 0 && !loading) reload()
+        if (active) loadFriends()
+    }
 
     P5Support.DataSource {
         id: runner
@@ -83,6 +86,25 @@ Item {
         runner.connectSource(gv.portalBin + " --set-art " + shq(g.id) + " " + shq(p))
     }
 
+    // ---- friends presence (cached by the portal-friends --serve service) ----
+    property var friendsByAppid: ({})
+    property string friendsBin: "$HOME/.local/bin/portal-friends --snapshot"
+    function friendsFor(g) {
+        return (g && g.appid && gv.friendsByAppid[g.appid]) ? gv.friendsByAppid[g.appid] : []
+    }
+    function steamRun(url) { if (url) runner.connectSource("steam " + shq(url)) }
+    P5Support.DataSource {
+        id: friendsSrc
+        engine: "executable"
+        onNewData: function(source, d) {
+            disconnectSource(source)
+            try { gv.friendsByAppid = (JSON.parse(d.stdout || "{}").by_appid) || ({}) }
+            catch (e) { gv.friendsByAppid = ({}) }
+        }
+    }
+    function loadFriends() { friendsSrc.connectSource(gv.friendsBin) }
+    Timer { interval: 30000; repeat: true; running: gv.active; onTriggered: gv.loadFriends() }
+
     property var _pendingArtGame: null
     FileDialog {
         id: artDialog
@@ -95,6 +117,7 @@ Item {
     QQC2.Menu {
         id: gameMenu
         property var game: null
+        property var friends: []
         QQC2.MenuItem { text: i18n("Launch"); icon.name: "media-playback-start"; onTriggered: gv.launch(gameMenu.game) }
         QQC2.MenuSeparator {}
         QQC2.MenuItem { text: i18n("Set custom art…"); icon.name: "insert-image"; onTriggered: gv.pickArt(gameMenu.game) }
@@ -104,8 +127,33 @@ Item {
             enabled: gameMenu.game && gameMenu.game.appid
             onTriggered: gv.openStore(gameMenu.game)
         }
+        // ---- friends currently in this game (one submenu each) ----
+        QQC2.MenuSeparator {
+            visible: gameMenu.friends.length > 0
+            height: visible ? implicitHeight : 0
+        }
+        QQC2.MenuItem {
+            enabled: false
+            visible: gameMenu.friends.length > 0
+            height: visible ? implicitHeight : 0
+            icon.name: "im-user"
+            text: i18np("%1 friend playing", "%1 friends playing", gameMenu.friends.length)
+        }
+        Instantiator {
+            model: gameMenu.friends
+            delegate: QQC2.Menu {
+                required property var modelData
+                title: modelData.name
+                QQC2.MenuItem { text: i18n("Join Game"); icon.name: "media-playback-start"; onTriggered: gv.steamRun(modelData.join) }
+                QQC2.MenuItem { text: i18n("Profile"); icon.name: "user-identity"; onTriggered: gv.steamRun(modelData.profile) }
+                QQC2.MenuItem { text: i18n("Watch Game"); icon.name: "video-television"; onTriggered: gv.steamRun(modelData.watch) }
+                QQC2.MenuItem { text: i18n("Send Message"); icon.name: "mail-message"; onTriggered: gv.steamRun(modelData.message) }
+            }
+            onObjectAdded: function(index, object) { gameMenu.addMenu(object) }
+            onObjectRemoved: function(index, object) { gameMenu.removeMenu(object) }
+        }
     }
-    function popMenu(g) { gameMenu.game = g; gameMenu.popup() }
+    function popMenu(g) { gameMenu.game = g; gameMenu.friends = gv.friendsFor(g); gameMenu.popup() }
 
     // reusable wide "banner" tile (hero/header art + logo/name), used by list & banner
     component BannerTile: Rectangle {
@@ -153,6 +201,35 @@ Item {
             visible: tile.game && !tile.game.logo
             text: tile.game ? (tile.game.name || "") : ""
             color: "white"; font.weight: Font.Bold
+        }
+        // friends-playing badge (green person bust + count), top-right
+        Rectangle {
+            id: tileBadge
+            anchors.top: parent.top; anchors.right: parent.right
+            anchors.margins: Kirigami.Units.smallSpacing
+            readonly property int n: gv.friendsFor(tile.game).length
+            visible: n > 0
+            z: 20
+            height: Math.round(Kirigami.Units.gridUnit * 1.1)
+            width: tileBadgeRow.implicitWidth + Kirigami.Units.smallSpacing * 1.5
+            radius: height / 2
+            color: "#43a047"
+            border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.35)
+            Row {
+                id: tileBadgeRow
+                anchors.centerIn: parent; spacing: 1
+                Kirigami.Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.round(tileBadge.height * 0.7); height: width
+                    source: "im-user"; color: "white"
+                }
+                PlasmaComponents.Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: tileBadge.n
+                    color: "white"; font.weight: Font.Bold
+                    font.pixelSize: Math.round(tileBadge.height * 0.6)
+                }
+            }
         }
         // Play button (confirm) — appears after a click, hides when you leave
         signal playRequested()
@@ -210,6 +287,7 @@ Item {
                 anchors.centerIn: parent
                 width: gv.cardWidth; height: gv.cardWidth * 1.5
                 game: modelData; showTitle: gv.showTitles
+                friendCount: gv.friendsFor(modelData).length
                 onCardClicked: gridCard.armed = true
                 onLaunchRequested: gv.launch(modelData)
                 onMenuRequested: gv.popMenu(modelData)
@@ -248,6 +326,7 @@ Item {
         anchors.fill: parent
         visible: gv.viewMode === "carousel"
         items: gv.viewMode === "carousel" ? gv.view : []
+        friendsByAppid: gv.friendsByAppid
         tilt: false
         shrink: false
         cardWidth: gv.cardWidth
@@ -262,6 +341,7 @@ Item {
         anchors.fill: parent
         visible: gv.viewMode === "carousel3d"
         items: gv.viewMode === "carousel3d" ? gv.view : []
+        friendsByAppid: gv.friendsByAppid
         tilt: true
         cardWidth: gv.cardWidth
         showTitles: gv.showTitles

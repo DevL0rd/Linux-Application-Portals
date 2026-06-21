@@ -1,3 +1,6 @@
+# Local config holds your Steam Web API key -- never commit it.
+config.json
+
 # Python
 __pycache__/
 *.py[cod]

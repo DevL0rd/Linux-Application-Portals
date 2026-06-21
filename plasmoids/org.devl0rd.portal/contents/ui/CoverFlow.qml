@@ -12,6 +12,10 @@ Item {
     id: cf
     clip: true
     property var items: []
+    property var friendsByAppid: ({})   // appid -> friends list, for the badge
+    function friendCountFor(g) {
+        return (g && g.appid && friendsByAppid[g.appid]) ? friendsByAppid[g.appid].length : 0
+    }
     property bool tilt: false             // turn side cards sideways (3D)
     property bool shrink: true            // scale side cards down toward the edges
     property int cardWidth: 150           // requested (zoom) width; acts as a maximum
@@ -134,6 +138,7 @@ Item {
                 id: cfCard
                 anchors.fill: parent
                 game: modelData
+                friendCount: cf.friendCountFor(modelData)
                 showTitle: cf.showTitles
                 disarmOnExit: false                        // CoverFlow manages arming
                 armed: tile.ad < 0.5 && cf.centerArmed     // only the centred card, when armed

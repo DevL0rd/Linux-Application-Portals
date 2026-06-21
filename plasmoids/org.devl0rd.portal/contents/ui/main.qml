@@ -41,8 +41,12 @@ PlasmoidItem {
         ? categories[currentIndex] : null
     readonly property bool gamesActive: currentCat && currentCat.type === "games"
     readonly property bool favActive: currentCat && currentCat.type === "fav"
-    // the "All Applications" page gets a pinned Favourites section at the top
+    // the "All Applications" page shows favourites + every real category as its own
+    // section; allAppsActive flags that page, appSectionCategories are the sections
     readonly property bool allAppsActive: currentCat && currentCat.type === "apps" && currentCat.allApps === true
+    readonly property var appSectionCategories: categories.filter(function(c) {
+        return c.type === "apps" && c.allApps !== true
+    })
 
     // favourites read from the shared KActivities store via the backend
     property var favorites: []
@@ -364,53 +368,94 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                // app category page: a pinned Favourites section on top (only for
-                // "All Applications"), then the category grid/list below it
-                ColumnLayout {
+                // a specific category picked in the dropdown: one plain view
+                AppGrid {
+                    id: appGrid
                     anchors.fill: parent
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: !root.gamesActive && !root.favActive
+                    visible: !root.gamesActive && !root.favActive && !root.allAppsActive
+                    appModel: root.allAppsActive ? null : root.appModelFor(root.currentCat)
+                    favSet: root.favSet
+                    viewMode: root.appViewMode
+                    searchText: root.searchText
+                    sortMode: root.sortMode
+                    usage: root.usage
+                    onLaunchedKey: function(key) { root.recordLaunch(key); root.launchAndClose() }
+                    onFavToggle: function(resource, add) { root.toggleFavorite(resource, add) }
+                }
 
-                    // ---- pinned Favourites section (All Applications only) ----
-                    PlasmaComponents.Label {
-                        Layout.fillWidth: true
-                        visible: root.allAppsActive && favStrip.items.length > 0
-                        horizontalAlignment: Text.AlignHCenter
-                        text: i18n("Favourites")
-                        font: Kirigami.Theme.smallFont
-                        opacity: 0.7
-                    }
-                    FavGrid {
-                        id: favStrip
-                        Layout.fillWidth: true
-                        // cap the strip to two rows; it scrolls if there are more.
-                        // height is count-derived (not the view's contentHeight) to
-                        // avoid a layout binding loop
-                        Layout.preferredHeight: favStrip.twoRowHeight
-                        visible: root.allAppsActive && favStrip.items.length > 0
-                        favorites: root.favorites
-                        searchText: root.searchText
-                        onLaunched: root.launchAndClose()
-                        onRemoveFav: function(resource) { root.toggleFavorite(resource, false) }
-                    }
-                    Kirigami.Separator {
-                        Layout.fillWidth: true
-                        visible: root.allAppsActive && favStrip.items.length > 0
-                    }
+                // the "All Applications" page: Favourites + one section per category,
+                // all scrolling together; favourites are excluded from the categories
+                // so nothing shows twice
+                QQC2.ScrollView {
+                    id: sectionsScroll
+                    anchors.fill: parent
+                    visible: root.allAppsActive
+                    contentWidth: availableWidth
+                    clip: true
 
-                    AppGrid {
-                        id: appGrid
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        appModel: (root.gamesActive || root.favActive) ? null : root.appModelFor(root.currentCat)
-                        favSet: root.favSet
-                        excludeFavorites: root.allAppsActive
-                        viewMode: root.appViewMode
-                        searchText: root.searchText
-                        sortMode: root.sortMode
-                        usage: root.usage
-                        onLaunchedKey: function(key) { root.recordLaunch(key); root.launchAndClose() }
-                        onFavToggle: function(resource, add) { root.toggleFavorite(resource, add) }
+                    ColumnLayout {
+                        width: sectionsScroll.availableWidth
+                        spacing: Kirigami.Units.smallSpacing
+
+                        // ---- Favourites section ----
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: favSection.items.length > 0
+                            spacing: Kirigami.Units.smallSpacing / 2
+                            PlasmaComponents.Label {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: i18n("Favourites")
+                                font: Kirigami.Theme.smallFont
+                                opacity: 0.7
+                            }
+                            FavGrid {
+                                id: favSection
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: contentHeightHint
+                                sectionMode: true
+                                viewMode: root.appViewMode
+                                favorites: root.favorites
+                                searchText: root.searchText
+                                onLaunched: root.launchAndClose()
+                                onRemoveFav: function(resource) { root.toggleFavorite(resource, false) }
+                            }
+                            Kirigami.Separator { Layout.fillWidth: true }
+                        }
+
+                        // ---- one section per real category (favourites removed) ----
+                        Repeater {
+                            model: root.appSectionCategories
+                            delegate: ColumnLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                visible: catGrid.items.length > 0
+                                spacing: Kirigami.Units.smallSpacing / 2
+                                PlasmaComponents.Label {
+                                    Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: modelData.label
+                                    font: Kirigami.Theme.smallFont
+                                    opacity: 0.7
+                                }
+                                AppGrid {
+                                    id: catGrid
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: contentHeightHint
+                                    appModel: root.appModelFor(modelData)
+                                    favSet: root.favSet
+                                    excludeFavorites: true
+                                    sectionMode: true
+                                    viewMode: root.appViewMode
+                                    searchText: root.searchText
+                                    sortMode: root.sortMode
+                                    usage: root.usage
+                                    onLaunchedKey: function(key) { root.recordLaunch(key); root.launchAndClose() }
+                                    onFavToggle: function(resource, add) { root.toggleFavorite(resource, add) }
+                                }
+                                Kirigami.Separator { Layout.fillWidth: true }
+                            }
+                        }
                     }
                 }
 

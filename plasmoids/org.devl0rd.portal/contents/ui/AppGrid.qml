@@ -20,11 +20,25 @@ Item {
     property string searchText: ""
     property string sortMode: "recent"
     property var usage: ({})
+    property bool sectionMode: false        // size to content, no own scroll
     signal launchedKey(string key)
     signal favToggle(string resource, bool add)
     function favKey(id) { return String(id || "").replace(/^applications:/, "") }
 
     readonly property int iconSize: Plasmoid.configuration.iconSize
+
+    // content-derived metrics (width + count only) so a caller can size a section
+    readonly property int cellSize: iconSize + Kirigami.Units.gridUnit * 2
+    readonly property int gridCellHeight: iconSize + (Plasmoid.configuration.showAppLabels ? Kirigami.Units.gridUnit * 2.4 : Kirigami.Units.smallSpacing * 3)
+    readonly property int listRowHeight: Math.round(iconSize * 0.8) + Kirigami.Units.smallSpacing * 2
+    readonly property int maxCols: Math.max(1, Math.floor(width / cellSize))
+    readonly property int contentHeightHint: {
+        var n = items.length
+        if (n === 0) return 0
+        if (viewMode === "list") return n * listRowHeight
+        var cols = Math.max(1, Math.min(n, maxCols))
+        return Math.ceil(n / cols) * gridCellHeight
+    }
 
     property var rawItems: []
     function rebuild() {
@@ -98,14 +112,13 @@ Item {
         width: cols * cellWidth
         visible: root.viewMode === "grid"
         clip: true
+        interactive: !root.sectionMode
         model: root.viewMode === "grid" ? root.items : []
-        readonly property int cell: root.iconSize + Kirigami.Units.gridUnit * 2
-        readonly property int maxCols: Math.max(1, Math.floor(root.width / cell))
-        readonly property int cols: Math.max(1, Math.min(count, maxCols))
-        cellWidth: cell
-        cellHeight: root.iconSize + (Plasmoid.configuration.showAppLabels ? Kirigami.Units.gridUnit * 2.4 : Kirigami.Units.smallSpacing * 3)
+        readonly property int cols: Math.max(1, Math.min(count, root.maxCols))
+        cellWidth: root.cellSize
+        cellHeight: root.gridCellHeight
         boundsBehavior: Flickable.StopAtBounds
-        QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+        QQC2.ScrollBar.vertical: QQC2.ScrollBar { visible: !root.sectionMode }
 
         delegate: Item {
             width: grid.cellWidth
@@ -154,13 +167,14 @@ Item {
         anchors.fill: parent
         visible: root.viewMode === "list"
         clip: true
+        interactive: !root.sectionMode
         model: root.viewMode === "list" ? root.items : []
         boundsBehavior: Flickable.StopAtBounds
-        QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+        QQC2.ScrollBar.vertical: QQC2.ScrollBar { visible: !root.sectionMode }
 
         delegate: Rectangle {
             width: list.width
-            height: root.iconSize * 0.8 + Kirigami.Units.smallSpacing * 2
+            height: root.listRowHeight
             radius: Kirigami.Units.smallSpacing
             color: rowMa.containsMouse ? Qt.alpha(Kirigami.Theme.highlightColor, 0.18) : "transparent"
             RowLayout {
@@ -228,7 +242,7 @@ Item {
 
     PlasmaComponents.Label {
         anchors.centerIn: parent
-        visible: root.items.length === 0
+        visible: !root.sectionMode && root.items.length === 0
         text: root.searchText !== "" ? i18n("No matches") : i18n("Nothing here")
         opacity: 0.5
     }
