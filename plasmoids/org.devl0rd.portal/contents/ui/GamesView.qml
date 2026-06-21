@@ -8,6 +8,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import QtQuick.Dialogs
+import Qt5Compat.GraphicalEffects
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.plasma5support as P5Support
@@ -24,6 +25,7 @@ Item {
     property string portalBin: "$HOME/.local/bin/portal-games"
     property var games: []
     property bool loading: false
+    property bool friendsOnly: false          // filter: only games with a friend online
     signal launched()
 
     readonly property bool isCarousel: viewMode === "carousel" || viewMode === "carousel3d"
@@ -38,7 +40,11 @@ Item {
 
     readonly property var view: {
         var q = gv.searchText.toLowerCase()
-        var a = gv.games.filter(function(g) { return q === "" || (g.name || "").toLowerCase().indexOf(q) >= 0 })
+        var a = gv.games.filter(function(g) {
+            if (q !== "" && (g.name || "").toLowerCase().indexOf(q) < 0) return false
+            if (gv.friendsOnly && gv.friendsFor(g).length === 0) return false
+            return true
+        })
         a = a.slice()
         if (gv.sortMode === "name") a.sort(function(x, y) { return x.name.localeCompare(y.name) })
         else if (gv.sortMode === "name_desc") a.sort(function(x, y) { return y.name.localeCompare(x.name) })
@@ -308,7 +314,18 @@ Item {
         delegate: Item {
             width: listView.width
             height: Kirigami.Units.gridUnit * 3.5
+            // green glow when a friend is online
+            RectangularGlow {
+                anchors.fill: rowTile
+                visible: gv.friendsFor(modelData).length > 0
+                z: -1
+                glowRadius: Kirigami.Units.largeSpacing
+                spread: 0.2
+                color: "#43a047"
+                cornerRadius: Kirigami.Units.smallSpacing + glowRadius
+            }
             BannerTile {
+                id: rowTile
                 anchors.fill: parent
                 game: modelData
                 scale: rowHover.hovered ? 1.01 : 1.0
@@ -364,7 +381,18 @@ Item {
         delegate: Item {
             width: bannerView.cellWidth
             height: bannerView.cellHeight
+            // green glow when a friend is online
+            RectangularGlow {
+                anchors.fill: bTile
+                visible: gv.friendsFor(modelData).length > 0
+                z: -1
+                glowRadius: Kirigami.Units.smallSpacing * 2
+                spread: 0.2
+                color: "#43a047"
+                cornerRadius: Kirigami.Units.smallSpacing + glowRadius
+            }
             BannerTile {
+                id: bTile
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing / 2
                 game: modelData
@@ -387,7 +415,9 @@ Item {
     PlasmaComponents.Label {
         anchors.centerIn: parent
         visible: !gv.loading && gv.view.length === 0
-        text: gv.searchText !== "" ? i18n("No matches") : i18n("No games found")
+        text: gv.searchText !== "" ? i18n("No matches")
+            : gv.friendsOnly ? i18n("No games with friends online")
+            : i18n("No games found")
         opacity: 0.5
     }
 }

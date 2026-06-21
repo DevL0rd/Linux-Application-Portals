@@ -199,7 +199,7 @@ PlasmoidItem {
 
     // sort metadata shared by the sort dropdown
     readonly property var sortOptions: [
-        { id: "recent", label: i18n("Last opened"), icon: "appointment-recurring" },
+        { id: "recent", label: i18n("Last opened"), icon: "clock" },
         { id: "name", label: i18n("Name (A–Z)"), icon: "view-sort-ascending" },
         { id: "name_desc", label: i18n("Name (Z–A)"), icon: "view-sort-descending" }
     ]
@@ -303,6 +303,20 @@ PlasmoidItem {
                             }
                             onObjectAdded: function(i, o) { sortMenu.insertItem(i, o) }
                             onObjectRemoved: function(i, o) { sortMenu.removeItem(o) }
+                        }
+                        // ---- additive filter (Games only), separate from sorting ----
+                        QQC2.MenuSeparator {
+                            visible: root.gamesActive
+                            height: visible ? implicitHeight : 0
+                        }
+                        QQC2.MenuItem {
+                            text: i18n("Friends online only")
+                            icon.name: "im-user"
+                            visible: root.gamesActive
+                            height: visible ? implicitHeight : 0
+                            checkable: true
+                            checked: Plasmoid.configuration.gamesFriendsOnly
+                            onTriggered: Plasmoid.configuration.gamesFriendsOnly = checked
                         }
                     }
                 }
@@ -480,6 +494,7 @@ PlasmoidItem {
                     sortMode: root.sortMode
                     usage: root.usage
                     showTitles: Plasmoid.configuration.showGameTitles
+                    friendsOnly: Plasmoid.configuration.gamesFriendsOnly
                     portalBin: root.portalBin
                     onLaunched: root.launchAndClose()
                 }

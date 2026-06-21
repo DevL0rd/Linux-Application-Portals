@@ -17,6 +17,7 @@ Modes:
   portal-friends --check      one poll, print SAFE counts (never the key)
   portal-friends --snapshot   print the cached JSON snapshot (for the widget)
   portal-friends --serve      resident: refresh the snapshot every interval
+  portal-friends --set-key K  write the Steam Web API key into the config
 """
 import os, re, sys, json, time, urllib.parse, urllib.request, urllib.error
 
@@ -97,6 +98,30 @@ def friend_entry(p, appid):
     }
 
 
+def friend_full(p):
+    """Full per-friend record for the Steam Friends applet (online or not)."""
+    sid = p.get("steamid", "")
+    appid = str(p.get("gameid") or "")
+    # personastate: 0 offline, 1 online, 2 busy, 3 away, 4 snooze, 5/6 online
+    state = int(p.get("personastate") or 0)
+    return {
+        "steamid": sid,
+        "name": p.get("personaname", ""),
+        "avatar": p.get("avatarfull") or p.get("avatarmedium", ""),
+        "state": state,
+        "ingame": bool(appid),
+        "appid": appid,
+        "game": p.get("gameextrainfo", ""),
+        "lastlogoff": p.get("lastlogoff", 0),
+        # steam:// actions (and a browser profile fallback)
+        "profile": f"steam://url/SteamIDPage/{sid}",
+        "profile_web": p.get("profileurl") or f"https://steamcommunity.com/profiles/{sid}",
+        "chat": f"steam://friends/message/{sid}",
+        "watch": f"steam://broadcast/watch/{sid}",
+        "join": f"steam://joinlobby/{appid}/{sid}" if appid else "",
+    }
+
+
 def build_snapshot(cfg):
     key = (cfg.get("steam_api_key") or "").strip()
     if not key or "PASTE" in key:
@@ -108,6 +133,8 @@ def build_snapshot(cfg):
                 "error": "could not determine SteamID"}
     ids = get_friend_ids(key, sid)
     players = get_summaries(key, ids) if ids else []
+    friends = [friend_full(p) for p in players]
+    friends.sort(key=lambda f: f["name"].lower())
     by_appid = {}
     for p in players:
         appid = str(p.get("gameid") or "")
@@ -116,7 +143,8 @@ def build_snapshot(cfg):
     for lst in by_appid.values():
         lst.sort(key=lambda f: f["name"].lower())
     return {"ts": time.time(), "ok": True, "self": sid,
-            "friends": len(ids), "by_appid": by_appid, "error": ""}
+            "count": len(ids), "friends": friends, "by_appid": by_appid,
+            "error": ""}
 
 
 # ---------------------------------------------------------------- modes
@@ -137,7 +165,7 @@ def cmd_check():
         print(f"  steamid: {cfg.get('steamid') or detect_steamid() or 'unknown'}")
         return 1
     n_friends_ingame = sum(len(v) for v in snap["by_appid"].values())
-    print(f"OK  steamid={snap['self']}  friends={snap['friends']}  "
+    print(f"OK  steamid={snap['self']}  friends={snap['count']}  "
           f"appids-with-friends={len(snap['by_appid'])}  friends-in-game={n_friends_ingame}")
     for appid, lst in list(snap["by_appid"].items())[:8]:
         print(f"  appid {appid}: {len(lst)} -> {[f['name'] for f in lst]} "
@@ -167,10 +195,29 @@ def cmd_snapshot():
         sys.stdout.write('{"ts":0,"ok":false,"by_appid":{},"error":"no snapshot"}')
 
 
+def cmd_set_key():
+    """Write the Steam Web API key into the config (preserving other fields)."""
+    key = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+    if not key:
+        print("no key given")
+        return 1
+    cfg = load_config() or {}
+    cfg["steam_api_key"] = key
+    cfg.setdefault("steamid", "")
+    cfg.setdefault("poll_interval", 10)
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    tmp = CONFIG + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, CONFIG)
+    print("ok")
+    return 0
+
+
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else "--check"
     return {"--check": cmd_check, "--serve": cmd_serve,
-            "--snapshot": cmd_snapshot}.get(arg, cmd_check)()
+            "--snapshot": cmd_snapshot, "--set-key": cmd_set_key}.get(arg, cmd_check)()
 
 
 if __name__ == "__main__":

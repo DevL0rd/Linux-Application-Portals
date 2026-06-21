@@ -5,6 +5,7 @@
  * Hover lifts/zooms the card; click launches; right-click for art + actions.
  */
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents
 
@@ -30,6 +31,17 @@ Item {
     scale: hovered ? 1.05 : 1.0
     z: hovered ? 10 : 0
     Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+
+    // green glow when a friend is online — makes these cards easy to spot
+    RectangularGlow {
+        anchors.fill: frame
+        visible: card.friendCount > 0
+        z: -1
+        glowRadius: Kirigami.Units.largeSpacing
+        spread: 0.25
+        color: "#43a047"
+        cornerRadius: frame.radius + glowRadius
+    }
 
     Rectangle {
         id: frame
