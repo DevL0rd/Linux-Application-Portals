@@ -15,6 +15,7 @@ Item {
     id: root
     property var appModel: null
     property var favSet: ({})               // desktop-id -> true
+    property bool excludeFavorites: false   // hide favourites (they're pinned elsewhere)
     property string viewMode: "grid"       // grid | list
     property string searchText: ""
     property string sortMode: "recent"
@@ -56,7 +57,12 @@ Item {
 
     readonly property var items: {
         var q = root.searchText.toLowerCase()
-        var a = root.rawItems.filter(function(it) { return q === "" || it.name.toLowerCase().indexOf(q) >= 0 })
+        var a = root.rawItems.filter(function(it) {
+            // on the All Applications page favourites are pinned in their own strip,
+            // so drop them here to avoid showing each one twice
+            if (root.excludeFavorites && it.favoriteId && root.favSet[root.favKey(it.favoriteId)]) return false
+            return q === "" || it.name.toLowerCase().indexOf(q) >= 0
+        })
         a = a.slice()
         if (root.sortMode === "name")
             a.sort(function(x, y) { return x.name.localeCompare(y.name) })
@@ -85,12 +91,18 @@ Item {
     // ---------------- GRID ----------------
     GridView {
         id: grid
-        anchors.fill: parent
+        // centered: fixed-size cells, grid width snapped to the columns actually used
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: cols * cellWidth
         visible: root.viewMode === "grid"
         clip: true
         model: root.viewMode === "grid" ? root.items : []
         readonly property int cell: root.iconSize + Kirigami.Units.gridUnit * 2
-        cellWidth: Math.floor(width / Math.max(1, Math.floor(width / cell)))
+        readonly property int maxCols: Math.max(1, Math.floor(root.width / cell))
+        readonly property int cols: Math.max(1, Math.min(count, maxCols))
+        cellWidth: cell
         cellHeight: root.iconSize + (Plasmoid.configuration.showAppLabels ? Kirigami.Units.gridUnit * 2.4 : Kirigami.Units.smallSpacing * 3)
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}

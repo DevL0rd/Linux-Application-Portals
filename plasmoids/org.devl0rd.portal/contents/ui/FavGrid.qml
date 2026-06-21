@@ -21,6 +21,10 @@ Item {
 
     readonly property int iconSize: Plasmoid.configuration.iconSize
 
+    // height hints so callers can cap the view (e.g. the All Applications strip)
+    readonly property real gridContentHeight: grid.contentHeight
+    readonly property int rowHeight: grid.cellHeight
+
     readonly property var items: {
         var q = root.searchText.toLowerCase()
         return (root.favorites || []).filter(function(f) {
@@ -37,11 +41,17 @@ Item {
 
     GridView {
         id: grid
-        anchors.fill: parent
+        // centered: fixed-size cells, grid width snapped to the columns actually used
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: cols * cellWidth
         clip: true
         model: root.items
         readonly property int cell: root.iconSize + Kirigami.Units.gridUnit * 2
-        cellWidth: Math.floor(width / Math.max(1, Math.floor(width / cell)))
+        readonly property int maxCols: Math.max(1, Math.floor(root.width / cell))
+        readonly property int cols: Math.max(1, Math.min(count, maxCols))
+        cellWidth: cell
         cellHeight: root.iconSize + (Plasmoid.configuration.showAppLabels ? Kirigami.Units.gridUnit * 2.4 : Kirigami.Units.smallSpacing * 3)
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}

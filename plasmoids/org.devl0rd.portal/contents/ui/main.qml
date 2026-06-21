@@ -41,6 +41,8 @@ PlasmoidItem {
         ? categories[currentIndex] : null
     readonly property bool gamesActive: currentCat && currentCat.type === "games"
     readonly property bool favActive: currentCat && currentCat.type === "fav"
+    // the "All Applications" page gets a pinned Favourites section at the top
+    readonly property bool allAppsActive: currentCat && currentCat.type === "apps" && currentCat.allApps === true
 
     // favourites read from the shared KActivities store via the backend
     property var favorites: []
@@ -75,13 +77,15 @@ PlasmoidItem {
         }
     }
     function loadFavorites() { favSrc.connectSource(portalBin + " --favorites") }
-    onCurrentIndexChanged: if (favActive) loadFavorites()
+    // the Favourites tab AND the All Applications page (pinned favourites strip) both
+    // need a fresh snapshot when shown
+    onCurrentIndexChanged: if (favActive || allAppsActive) loadFavorites()
     // favourites come from a backend snapshot (not a live model like the kicker app
-    // models), so refresh them while the Favourites tab is on screen
+    // models), so refresh them while a page that displays them is on screen
     Timer {
         interval: 2500
         repeat: true
-        running: root.favActive
+        running: root.favActive || root.allAppsActive
         onTriggered: root.loadFavorites()
     }
     P5Support.DataSource {
@@ -164,13 +168,19 @@ PlasmoidItem {
     function rebuildCategories() {
         var cats = [{ label: i18n("Favorites"), type: "fav", row: -1 }]
         var hadGames = false
+        // the kicker emits "All Applications" as its first app category (showAllApps,
+        // not categorized); flag the first apps entry so it gets the favourites strip,
+        // instead of matching a localised label
+        var assignedAll = false
         for (var i = 0; i < catRows.count; i++) {
             var o = catRows.objectAt(i)
             if (!o || o.label === "") continue
             if (o.label.toLowerCase().indexOf("game") >= 0) {
                 cats.push({ label: o.label, type: "games", row: o.row }); hadGames = true
             } else {
-                cats.push({ label: o.label, type: "apps", row: o.row })
+                var isAll = !assignedAll
+                if (isAll) assignedAll = true
+                cats.push({ label: o.label, type: "apps", row: o.row, allApps: isAll })
             }
         }
         if (!hadGames)
@@ -180,7 +190,8 @@ PlasmoidItem {
         // once the saved category appears in the list -- nothing to restore here.
     }
 
-    function launchAndClose() { root.expanded = false }
+    // clear the search on launch so the list is back to normal next time it opens
+    function launchAndClose() { root.searchText = ""; root.expanded = false }
 
     // sort metadata shared by the sort dropdown
     readonly property var sortOptions: [
@@ -353,18 +364,52 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                AppGrid {
-                    id: appGrid
+                // app category page: a pinned Favourites section on top (only for
+                // "All Applications"), then the category grid/list below it
+                ColumnLayout {
                     anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
                     visible: !root.gamesActive && !root.favActive
-                    appModel: (root.gamesActive || root.favActive) ? null : root.appModelFor(root.currentCat)
-                    favSet: root.favSet
-                    viewMode: root.appViewMode
-                    searchText: root.searchText
-                    sortMode: root.sortMode
-                    usage: root.usage
-                    onLaunchedKey: function(key) { root.recordLaunch(key); root.launchAndClose() }
-                    onFavToggle: function(resource, add) { root.toggleFavorite(resource, add) }
+
+                    // ---- pinned Favourites section (All Applications only) ----
+                    PlasmaComponents.Label {
+                        Layout.fillWidth: true
+                        visible: root.allAppsActive && favStrip.items.length > 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: i18n("Favourites")
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                    }
+                    FavGrid {
+                        id: favStrip
+                        Layout.fillWidth: true
+                        // cap the strip to two rows; it scrolls if there are more
+                        Layout.preferredHeight: Math.min(favStrip.gridContentHeight, favStrip.rowHeight * 2)
+                        visible: root.allAppsActive && favStrip.items.length > 0
+                        favorites: root.favorites
+                        searchText: root.searchText
+                        onLaunched: root.launchAndClose()
+                        onRemoveFav: function(resource) { root.toggleFavorite(resource, false) }
+                    }
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        visible: root.allAppsActive && favStrip.items.length > 0
+                    }
+
+                    AppGrid {
+                        id: appGrid
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        appModel: (root.gamesActive || root.favActive) ? null : root.appModelFor(root.currentCat)
+                        favSet: root.favSet
+                        excludeFavorites: root.allAppsActive
+                        viewMode: root.appViewMode
+                        searchText: root.searchText
+                        sortMode: root.sortMode
+                        usage: root.usage
+                        onLaunchedKey: function(key) { root.recordLaunch(key); root.launchAndClose() }
+                        onFavToggle: function(resource, add) { root.toggleFavorite(resource, add) }
+                    }
                 }
 
                 FavGrid {
