@@ -235,8 +235,8 @@ PlasmoidItem {
     }
     Timer { id: setupReloadTimer; interval: 4000; repeat: false; onTriggered: root.read() }
 
-    // poll the (cheap, in-process) snapshot read; the collector refreshes it every 10s
-    Timer { interval: 5000; repeat: true; running: true; onTriggered: root.read() }
+    // event-driven: re-read the instant the collector rewrites the snapshot (no polling)
+    FileWatcher { path: root.cachePath; onChanged: root.read() }
     Component.onCompleted: {
         refreshIcon()
         pathHelper.connectSource("printf %s \"$XDG_RUNTIME_DIR/Plasma-App-Portal/friends.json\"")
